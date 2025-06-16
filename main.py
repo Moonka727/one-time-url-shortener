@@ -74,70 +74,68 @@ HTML_TEMPLATE = '''
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
-      background-color: #000000;
+      background-color: #121212;
       color: #ffffff;
+      font-family: 'Arial', sans-serif;
     }
-    .bg-white {
-      background-color: #222222;
-      box-shadow: 0 0 20px rgba(128, 0, 128, 0.5);
+    .bg-card {
+      background-color: #1e1e1e;
+      border-radius: 0.5rem;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
     }
-    .bg-blue-500 {
+    .bg-primary {
       background-color: #6f2c91;
     }
-    .bg-blue-600 {
+    .bg-primary-hover {
       background-color: #7a4bba;
     }
-    .text-blue-600 {
+    .text-primary {
       color: #9a4fba;
     }
-    .text-green-600 {
+    .text-success {
       color: #00ff7f;
     }
-    .text-red-600 {
+    .text-danger {
       color: #ff4d4d;
     }
-    .bg-green-100 {
+    .bg-success {
       background-color: rgba(0, 255, 127, 0.1);
       color: #00ff7f;
     }
-    .bg-red-100 {
+    .bg-danger {
       background-color: rgba(255, 77, 77, 0.1);
       color: #ff4d4d;
     }
     h1, h2 {
-      text-shadow: 0 0 10px rgba(128, 0, 128, 0.7);
+      margin-bottom: 1rem;
     }
-    input {
+    input, select {
       transition: all 0.3s ease;
-      background-color: #111111;
-      border: 1px solid #555555;
-      color: #fff;
-    }
-    input:focus {
-      outline: none;
-      box-shadow: 0 0 5px rgba(128, 0, 128, 0.7);
-    }
-    select {
       background-color: #222222;
       border: 1px solid #555555;
-      color: #fff;
-      padding: 0.3rem 0.5rem;
+      color: #ffffff;
+      padding: 0.5rem;
       border-radius: 0.25rem;
-      cursor: pointer;
     }
-    select option {
-      background-color: #222222;
-      color: #fff;
+    input:focus, select:focus {
+      outline: none;
+      border-color: #6f2c91;
+    }
+    button {
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #7a4bba;
     }
   </style>
 </head>
 <body class="min-h-screen flex items-center justify-center">
-  <div class="bg-white p-6 rounded shadow-md w-full max-w-lg text-center">
-    <h1 class="text-2xl font-bold mb-4">🔗 {{ texts.title }}</h1>
+  <div class="bg-card p-6 w-full max-w-lg text-center">
+    <h1 class="text-2xl font-bold">🔗 {{ texts.title }}</h1>
 
     <form method="POST" action="/create?lang={{ lang }}" class="flex flex-col gap-3" id="linkForm">
-      <input name="url" placeholder="{{ texts.placeholder }}" required class="p-2 rounded w-full" />
-      <button type="submit" class="bg-blue-500 text-white py-2 rounded hover:bg-blue-600">{{ texts.create_btn }}</button>
+      <input name="url" placeholder="{{ texts.placeholder }}" required class="w-full" />
+      <button type="submit" class="bg-primary text-white py-2 rounded">{{ texts.create_btn }}</button>
     </form>
 
     <div class="mt-4">
@@ -150,13 +148,13 @@ HTML_TEMPLATE = '''
     </div>
 
     {% if result %}
-      <div class="mt-4 p-3 bg-green-100 rounded break-words">
-        ✅ {{ texts.url_label }} <a class="underline text-blue-600" href="{{ result }}">{{ result }}</a>
+      <div class="mt-4 p-3 bg-success rounded break-words">
+        ✅ {{ texts.url_label }} <a class="underline text-primary" href="{{ result }}">{{ result }}</a>
       </div>
     {% endif %}
 
     {% if error %}
-      <div class="mt-4 p-3 bg-red-100 rounded">
+      <div class="mt-4 p-3 bg-danger rounded">
         ⚠️ {{ error }}
       </div>
     {% endif %}
