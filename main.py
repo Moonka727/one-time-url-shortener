@@ -1,12 +1,13 @@
-from flask import Flask, request, redirect, render_template_string
+from flask import Flask, request, redirect, render_template_string, make_response
 import uuid
 import json
 import os
+import re
 
 app = Flask(__name__)
 DB_FILE = 'db.json'
 
-# Загружаем базу из файла или создаем пустую
+# Загрузка базы
 if os.path.exists(DB_FILE):
     with open(DB_FILE, 'r', encoding='utf-8') as f:
         db = json.load(f)
@@ -17,120 +18,241 @@ def save_db():
     with open(DB_FILE, 'w', encoding='utf-8') as f:
         json.dump(db, f, ensure_ascii=False, indent=2)
 
-# HTML с Tailwind, стилями и JS в одном шаблоне
+# Тексты для локализации
+LANG = {
+    'en': {
+        'title': "One-time URL Shortener",
+        'input_placeholder': "Paste your URL",
+        'create_button': "Create",
+        'your_link': "Your link:",
+        'link_not_found': "Link not found.",
+        'link_used': "Link has already been used.",
+        'enter_valid_url': "Please enter a valid URL.",
+        'url_prefix_alert': "Please enter a full URL starting with http:// or https://",
+        'how_it_works': "How it works:",
+        'step1': "1. Paste the URL above.",
+        'step2': "2. Click Create to get a shortened link.",
+        'step3': "3. Use the shortened link while it's active!",
+        'language': "Language",
+    },
+    'ru': {
+        'title': "Одноразовый сокращатель ссылок",
+        'input_placeholder': "Вставьте ссылку",
+        'create_button': "Создать",
+        'your_link': "Ваша ссылка:",
+        'link_not_found': "Ссылка не найдена.",
+        'link_used': "Ссылка уже использована.",
+        'enter_valid_url': "Введите корректную ссылку.",
+        'url_prefix_alert': "Пожалуйста, вставьте полный URL, начинающийся с http:// или https://",
+        'how_it_works': "Как это работает:",
+        'step1': "1. Вставьте ссылку в поле выше.",
+        'step2': "2. Нажмите \"Создать\", чтобы получить сокращенную ссылку.",
+        'step3': "3. Используйте сокращенную ссылку, пока она активна!",
+        'language': "Язык",
+    },
+    'az': {
+        'title': "Tək istifadəlik URL qısaldıcı",
+        'input_placeholder': "Linki yapışdırın",
+        'create_button': "Yarat",
+        'your_link': "Sizin linkiniz:",
+        'link_not_found': "Link tapılmadı.",
+        'link_used': "Link artıq istifadə olunub.",
+        'enter_valid_url': "Zəhmət olmasa düzgün link daxil edin.",
+        'url_prefix_alert': "Zəhmət olmasa http:// və ya https:// ilə başlayan tam URL daxil edin",
+        'how_it_works': "İş prinsipi:",
+        'step1': "1. Yuxarıdakı sahəyə link yapışdırın.",
+        'step2': "2. Qısaldılmış link almaq üçün Yarat düyməsini basın.",
+        'step3': "3. Link aktiv olduğu müddətcə istifadə edin!",
+        'language': "Dil",
+    }
+}
+
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ lang }}">
 <head>
   <meta charset="UTF-8" />
-  <title>Одноразовый сокращатель ссылок</title>
+  <title>{{ texts.title }}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
-      background-color: #1a1a2e; /* Dark background */
+      background-color: #000000;
+      color: #ffffff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: Arial, sans-serif;
     }
-    .bg-white {
-      background-color: #2e2e3a; /* Darker card background */
-      box-shadow: 0 0 20px rgba(128, 0, 128, 0.5); /* Purple glow */
+    .container {
+      background-color: #121212;
+      padding: 2rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 0 10px #555;
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
     }
-    .bg-blue-500 {
-      background-color: #6f2c91; /* Purple button */
+    input, button, select {
+      border-radius: 0.375rem;
+      border: 1px solid #444;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      background-color: #222;
+      color: #eee;
+      transition: box-shadow 0.3s ease;
     }
-    .bg-blue-600 {
-      background-color: #7a4bba; /* Darker purple on hover */
-    }
-    .text-blue-600 {
-      color: #9a4fba; /* Lighter purple for links */
-    }
-    .text-green-600 {
-      color: #00ff7f; /* Bright green for active status */
-    }
-    .text-red-600 {
-      color: #ff4d4d; /* Bright red for used status */
-    }
-    .bg-green-100 {
-      background-color: rgba(0, 255, 127, 0.1); /* Light green background */
-    }
-    .bg-red-100 {
-      background-color: rgba(255, 77, 77, 0.1); /* Light red background */
-    }
-    h1, h2 {
-      text-shadow: 0 0 10px rgba(128, 0, 128, 0.7); /* Glowing text */
-    }
-    input {
-      transition: all 0.3s ease;
-    }
-    input:focus {
+    input:focus, select:focus {
       outline: none;
-      box-shadow: 0 0 5px rgba(128, 0, 128, 0.7); /* Input glow on focus */
+      box-shadow: 0 0 5px #888;
+      border-color: #888;
+      background-color: #333;
+    }
+    button {
+      cursor: pointer;
+      background-color: #fff;
+      color: #000;
+      border: none;
+      margin-top: 1rem;
+      width: 100%;
+    }
+    button:hover {
+      background-color: #eee;
+    }
+    a {
+      color: #9a9;
+      text-decoration: underline;
+      word-break: break-word;
+    }
+    .message {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 0.5rem;
+    }
+    .success {
+      background-color: #004400;
+      color: #aaffaa;
+    }
+    .error {
+      background-color: #440000;
+      color: #ffaaaa;
+    }
+    .lang-select {
+      margin-bottom: 1rem;
+      text-align: right;
     }
   </style>
 </head>
-<body class="min-h-screen flex items-center justify-center">
-  <div class="bg-white p-6 rounded shadow-md w-full max-w-lg text-center">
-    <h1 class="text-2xl font-bold mb-4">🔗 Одноразовый сокращатель ссылок</h1>
-    <form method="POST" action="/create" class="flex flex-col gap-3" id="linkForm">
-      <input name="url" placeholder="Вставьте ссылку" required class="p-2 border rounded w-full" />
-      <button type="submit" class="bg-blue-500 text-white py-2 rounded hover:bg-blue-600">Создать</button>
+<body>
+  <div class="container">
+    <div class="lang-select">
+      <form method="GET" id="langForm">
+        <label for="lang">{{ texts.language }}: </label>
+        <select name="lang" id="lang" onchange="document.getElementById('langForm').submit()">
+          <option value="en" {% if lang == 'en' %}selected{% endif %}>English</option>
+          <option value="ru" {% if lang == 'ru' %}selected{% endif %}>Русский</option>
+          <option value="az" {% if lang == 'az' %}selected{% endif %}>Azərbaycanca</option>
+        </select>
+      </form>
+    </div>
+    <h1 style="margin-bottom: 1rem;">🔗 {{ texts.title }}</h1>
+
+    <form method="POST" action="/create{% if lang %}?lang={{ lang }}{% endif %}" id="linkForm">
+      <input
+        type="url"
+        name="url"
+        placeholder="{{ texts.input_placeholder }}"
+        required
+        pattern="https?://.+"
+        title="{{ texts.url_prefix_alert }}"
+        autocomplete="off"
+      />
+      <button type="submit">{{ texts.create_button }}</button>
     </form>
 
     {% if result %}
-      <div class="mt-4 p-3 bg-green-100 text-green-800 rounded break-words">
-        ✅ Ваша ссылка: <a class="underline text-blue-600" href="{{ result }}">{{ result }}</a>
+      <div class="message success" role="alert">
+        ✅ {{ texts.your_link }} <br/>
+        <a href="{{ result }}" target="_blank" rel="noopener noreferrer">{{ result }}</a>
       </div>
     {% endif %}
 
     {% if error %}
-      <div class="mt-4 p-3 bg-red-100 text-red-800 rounded">
+      <div class="message error" role="alert">
         ⚠️ {{ error }}
       </div>
     {% endif %}
-    
-    <div class="mt-6">
-      <h2 class="text-lg font-semibold">Как это работает:</h2>
-      <p class="text-gray-300 mt-2">1. Вставьте ссылку в поле выше.</p>
-      <p class="text-gray-300">2. Нажмите "Создать", чтобы получить сокращенную ссылку.</p>
-      <p class="text-gray-300">3. Используйте сокращенную ссылку, пока она активна!</p>
+
+    <div style="margin-top: 2rem; font-size: 0.9rem; color: #aaa; text-align: left;">
+      <h2>{{ texts.how_it_works }}</h2>
+      <ol style="padding-left: 1rem;">
+        <li>{{ texts.step1 }}</li>
+        <li>{{ texts.step2 }}</li>
+        <li>{{ texts.step3 }}</li>
+      </ol>
     </div>
   </div>
-
-  <script>
-    document.getElementById('linkForm').addEventListener('submit', function(event) {
-      const url = this.url.value.trim();
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        event.preventDefault();
-        alert('Пожалуйста, вставьте полный URL, начинающийся с http:// или https://');
-      }
-    });
-  </script>
 </body>
 </html>
 '''
 
+def get_lang():
+    # Получаем язык из параметров GET, потом из куки, иначе 'en'
+    lang = request.args.get('lang')
+    if lang not in LANG:
+        lang = request.cookies.get('lang', 'en')
+    if lang not in LANG:
+        lang = 'en'
+    return lang
+
 @app.route('/', methods=['GET'])
 def index():
-    return render_template_string(HTML_TEMPLATE, result=None, error=None)
+    lang = get_lang()
+    texts = LANG[lang]
+    resp = make_response(render_template_string(HTML_TEMPLATE, result=None, error=None, texts=texts, lang=lang))
+    resp.set_cookie('lang', lang, max_age=30*24*60*60)  # Запомнить на 30 дней
+    return resp
 
 @app.route('/create', methods=['POST'])
 def create():
-    url = request.form.get('url')
-    if not url:
-        return render_template_string(HTML_TEMPLATE, error="Введите корректную ссылку.", result=None)
+    lang = get_lang()
+    texts = LANG[lang]
+
+    url = request.form.get('url', '').strip()
+
+    # Простая валидация URL
+    if not url or not re.match(r'^https?://.+', url):
+        resp = make_response(render_template_string(HTML_TEMPLATE, error=texts['enter_valid_url'], result=None, texts=texts, lang=lang))
+        resp.set_cookie('lang', lang, max_age=30*24*60*60)
+        return resp
+
     token = str(uuid.uuid4())[:8]
     db[token] = {"url": url, "used": False}
     save_db()
     short_url = request.host_url + token
-    return render_template_string(HTML_TEMPLATE, result=short_url, error=None)
+
+    resp = make_response(render_template_string(HTML_TEMPLATE, result=short_url, error=None, texts=texts, lang=lang))
+    resp.set_cookie('lang', lang, max_age=30*24*60*60)
+    return resp
 
 @app.route('/<token>')
 def follow(token):
+    lang = get_lang()
+    texts = LANG[lang]
+
     if token not in db:
-        return render_template_string(HTML_TEMPLATE, error="Ссылка не найдена.", result=None)
+        resp = make_response(render_template_string(HTML_TEMPLATE, error=texts['link_not_found'], result=None, texts=texts, lang=lang))
+        resp.set_cookie('lang', lang, max_age=30*24*60*60)
+        return resp
     if db[token]['used']:
-        return render_template_string(HTML_TEMPLATE, error="Ссылка уже использована.", result=None)
+        resp = make_response(render_template_string(HTML_TEMPLATE, error=texts['link_used'], result=None, texts=texts, lang=lang))
+        resp.set_cookie('lang', lang, max_age=30*24*60*60)
+        return resp
+
     db[token]['used'] = True
     save_db()
     return redirect(db[token]['url'])
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
