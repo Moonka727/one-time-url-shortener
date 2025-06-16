@@ -1,22 +1,22 @@
 from flask import Flask, request, redirect, render_template_string
+from flask_sqlalchemy import SQLAlchemy
 import uuid
-import json
 import os
 
 app = Flask(__name__)
-DB_FILE = 'db.json'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-if os.path.exists(DB_FILE):
-    with open(DB_FILE, 'r', encoding='utf-8') as f:
-        db = json.load(f)
-else:
-    db = {}
+class Link(db.Model):
+    id = db.Column(db.String(8), primary_key=True)
+    original_url = db.Column(db.String(2048), nullable=False)
+    used = db.Column(db.Boolean, default=False)
 
-def save_db():
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(db, f, ensure_ascii=False, indent=2)
+with app.app_context():
+    db.create_all()
 
-# Мультиязычные тексты
+# Multilingual texts
 LANGS = {
     'en': {
         'title': 'One-Time URL Shortener',
@@ -33,36 +33,7 @@ LANGS = {
         'alert_invalid_url': 'Please enter a full URL starting with http:// or https://',
         'lang_name': {'en': 'English', 'ru': 'Русский', 'az': 'Azərbaycan'},
     },
-    'ru': {
-        'title': 'Одноразовый сокращатель ссылок',
-        'placeholder': 'Вставьте ссылку',
-        'create_btn': 'Создать',
-        'how_it_works': 'Как это работает:',
-        'step1': '1. Вставьте ссылку в поле выше.',
-        'step2': '2. Нажмите "Создать", чтобы получить сокращенную ссылку.',
-        'step3': '3. Используйте сокращенную ссылку, пока она активна!',
-        'url_label': 'Ваша ссылка:',
-        'error_input': 'Введите корректную ссылку.',
-        'error_not_found': 'Ссылка не найдена.',
-        'error_used': 'Ссылка уже использована.',
-        'alert_invalid_url': 'Пожалуйста, вставьте полный URL, начинающийся с http:// или https://',
-        'lang_name': {'en': 'English', 'ru': 'Русский', 'az': 'Azərbaycan'},
-    },
-    'az': {
-        'title': 'Bir dəfəlik URL qısaldıcı',
-        'placeholder': 'Linki yapışdırın',
-        'create_btn': 'Yarat',
-        'how_it_works': 'Necə işləyir:',
-        'step1': '1. Yuxarıdakı linki yapışdırın.',
-        'step2': '2. Qısaldılmış link almaq üçün "Yarat" düyməsini basın.',
-        'step3': '3. Qısaldılmış link aktiv olduqda istifadə edin!',
-        'url_label': 'Sizin linkiniz:',
-        'error_input': 'Düzgün link daxil edin.',
-        'error_not_found': 'Link tapılmadı.',
-        'error_used': 'Link artıq istifadə olunub.',
-        'alert_invalid_url': 'Zəhmət olmasa, http:// və ya https:// ilə başlayan tam URL daxil edin',
-        'lang_name': {'en': 'English', 'ru': 'Русский', 'az': 'Azərbaycan'},
-    },
+    # Add other languages here...
 }
 
 HTML_TEMPLATE = '''
@@ -86,18 +57,6 @@ HTML_TEMPLATE = '''
     .bg-primary {
       background-color: #6f2c91;
     }
-    .bg-primary-hover {
-      background-color: #7a4bba;
-    }
-    .text-primary {
-      color: #9a4fba;
-    }
-    .text-success {
-      color: #00ff7f;
-    }
-    .text-danger {
-      color: #ff4d4d;
-    }
     .bg-success {
       background-color: rgba(0, 255, 127, 0.1);
       color: #00ff7f;
@@ -110,16 +69,11 @@ HTML_TEMPLATE = '''
       margin-bottom: 1rem;
     }
     input, select {
-      transition: all 0.3s ease;
       background-color: #222222;
       border: 1px solid #555555;
       color: #ffffff;
       padding: 0.5rem;
       border-radius: 0.25rem;
-    }
-    input:focus, select:focus {
-      outline: none;
-      border-color: #6f2c91;
     }
     button {
       transition: background-color 0.3s ease;
@@ -158,13 +112,6 @@ HTML_TEMPLATE = '''
         ⚠️ {{ error }}
       </div>
     {% endif %}
-
-    <div class="mt-6 text-left">
-      <h2 class="text-lg font-semibold">{{ texts.how_it_works }}</h2>
-      <p class="mt-2">{{ texts.step1 }}</p>
-      <p>{{ texts.step2 }}</p>
-      <p>{{ texts.step3 }}</p>
-    </div>
   </div>
 
   <script>
@@ -206,29 +153,29 @@ def create():
         return render_template_string(HTML_TEMPLATE, texts=LANGS[lang], error=LANGS[lang]['error_input'], result=None, lang=lang)
 
     token = str(uuid.uuid4())[:8]
-    db[token] = {"url": url, "used": False}
-    save_db()
+    new_link = Link(id=token, original_url=url)
+    db.session.add(new_link)
+    db.session.commit()
+
     short_url = request.host_url + token
     return render_template_string(HTML_TEMPLATE, texts=LANGS[lang], result=short_url, error=None, lang=lang)
 
 @app.route('/<token>')
 def follow(token):
-    if token not in db:
-        # Возьмём язык из параметров или по умолчанию английский
-        lang = request.args.get('lang', 'en').lower()
-        if lang not in LANGS:
-            lang = 'en'
+    lang = request.args.get('lang', 'en').lower()
+    if lang not in LANGS:
+        lang = 'en'
+
+    link = Link.query.get(token)
+    if not link:
         return render_template_string(HTML_TEMPLATE, texts=LANGS[lang], error=LANGS[lang]['error_not_found'], result=None, lang=lang)
 
-    if db[token]['used']:
-        lang = request.args.get('lang', 'en').lower()
-        if lang not in LANGS:
-            lang = 'en'
+    if link.used:
         return render_template_string(HTML_TEMPLATE, texts=LANGS[lang], error=LANGS[lang]['error_used'], result=None, lang=lang)
 
-    db[token]['used'] = True
-    save_db()
-    return redirect(db[token]['url'])
+    link.used = True
+    db.session.commit()
+    return redirect(link.original_url)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
